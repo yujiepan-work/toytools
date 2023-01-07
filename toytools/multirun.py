@@ -5,10 +5,11 @@
 import asyncio
 import datetime
 import heapq
+import json
 import os
 import subprocess
-from pathlib import Path
 import time
+from pathlib import Path
 from typing import List, Union
 
 try:
@@ -32,7 +33,7 @@ def readable_seconds(seconds):
 
 
 def avail_cuda_list(memory_requirement: int):
-    with subprocess.Popen("nvidia-smi -q -d Memory | grep -A4 GPU | grep Free",
+    with subprocess.Popen("nvidia-smi -q -d Memory | grep -A5 GPU | grep Free",
                           shell=True, stdout=subprocess.PIPE) as p:
         free_mem = [(-int(x.split()[2]), i) for i, x in enumerate(p.stdout.readlines())]
 
@@ -62,12 +63,14 @@ class Job:
     @property
     def cmd_str(self):
         if isinstance(self.cmd, str):
-            return self.cmd
-        return ' '.join(map(str, self.cmd))
+            cmd_l = self.cmd.split()
+        else:
+            cmd_l = self.cmd
+        return ' '.join(map(str, cmd_l))
 
     @property
     def cmd_list(self):
-        return self.cmd_str.split(' ')
+        return self.cmd_str.split()
 
 
 class Launcher:
@@ -111,6 +114,13 @@ class Launcher:
         if job.io_folder is not None:
             io_folder = Path(job.io_folder)
             io_folder.mkdir(exist_ok=True, parents=True)
+            with open(io_folder / 'env.json', 'w', encoding='utf-8') as f_env:
+                json.dump(env, f_env, indent=4)
+            with open(io_folder / 'cmd.json', 'w', encoding='utf-8') as f_cmd:
+                json.dump({
+                    'str': job.cmd_str,
+                    'cmd_list': job.cmd_list,
+                }, f_cmd, indent=4)
             with open(io_folder / 'stdout.log', 'w', encoding='utf-8') as f_out, \
                     open(io_folder / 'stderr.log', 'w', encoding='utf-8') as f_err:
                 proc = await asyncio.subprocess.create_subprocess_shell(
