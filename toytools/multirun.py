@@ -20,6 +20,8 @@ except:
         return OKGREEN + str(string) + ENDC
 
 
+__all__ = ['avail_cuda_list', 'Launcher', 'Job']
+
 def now_time():
     return datetime.datetime.now().strftime('%Y%m%d-%H:%M:%S')
 
