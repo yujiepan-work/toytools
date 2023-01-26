@@ -28,6 +28,7 @@ def today_cipher(extra_secs = 0, add_date=True, num_chars=4, base_chars=BASE32_C
     max_new_base = len(base_chars) ** (num_chars) - 1
     h = seconds / max_seconds * max_new_base
     result = convert_base(int(h), base_chars)
+    result = result.zfill(num_chars)
     if add_date:
         result = f"{now.month:02d}{now.day:02d}_" + result
     return result
