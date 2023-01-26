@@ -1,18 +1,14 @@
 import itertools
 from argparse import Namespace
+from typing import Iterable, Sequence, Any, List, Dict
 
 
-def dict_to_namespace(d: dict):
+def dict_to_namespace(d: Dict[str, Any]):
     return Namespace(**d)
 
 
 def product(**kwargs):
-    keys = list(kwargs.keys())
-    values = list(kwargs.values())
-    cfgs = []
+    keys: List[str] = list(kwargs.keys())
+    values = kwargs.values()
     for item in itertools.product(*values):
-        item = list(item)
-        assert len(item) == len(keys)
-        d = dict(zip(keys, item))
-        cfgs.append(Namespace(**d))
-    return cfgs
+        yield dict_to_namespace(dict(zip(keys, item)))
