@@ -125,7 +125,7 @@ class Launcher:
                 )
             proc = await self._run_single_process(task.cmd_str(), task.io_folder, task.cwd, env)
             status = "SUCCESS" if proc.returncode == 0 else "FAIL"
-            logger.warning("%s Task-%d CUDA=%s: %s", status, task_id, cuda, task.identifier)
+            logger.warning("%s Task-%d PID=%d CUDA=%s: %s", status, task_id, proc.pid, cuda, task.identifier)
             return status
 
     async def _run_single_process(self, cmd: str, io_folder: Union[Path, str], cwd: str, env: Dict[str, str]):
