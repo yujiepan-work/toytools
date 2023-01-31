@@ -2,6 +2,7 @@ import hashlib
 import time
 from datetime import datetime, timedelta
 from typing import Any
+import jstyleson
 
 BASE32_CHARS = "0123456789abcdefghijkmnprstvwxyz"
 BASE16_CHARS = "0123456789abcdef"
@@ -20,7 +21,7 @@ def convert_base(number, base_chars=BASE32_CHARS):
     return "".join(result[::-1])
 
 
-def today_cipher(extra_secs = 0, add_date=True, num_chars=4, base_chars=BASE32_CHARS, timezone_delta: int = 8):
+def today_cipher(extra_secs=0, add_date=True, num_chars=4, base_chars=BASE32_CHARS, timezone_delta: int = 8):
     now = get_time(timezone_delta)
     seconds = now.second + now.minute * 60 + now.hour * 3600
     max_seconds = 24 * 3600
@@ -37,3 +38,11 @@ def today_cipher(extra_secs = 0, add_date=True, num_chars=4, base_chars=BASE32_C
 def get_hash(obj: Any) -> str:
     md5 = hashlib.md5(str(obj).encode())
     return md5.hexdigest()
+
+
+def json_dump(obj, file_path, mode='w', **kwargs):
+    with open(file_path, mode=mode) as f:
+        jstyleson.dump(
+            obj, f, **kwargs
+        )
+    return file_path
