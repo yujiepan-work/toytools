@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Union
 from unittest.mock import Mock
+import time
 
 logging.basicConfig(format="%(asctime)s %(levelname)-8s %(message)s", level=logging.INFO, datefmt="%Y-%m-%d %H:%M:%S")
 logger = logging.getLogger("toytools.batchrun")
@@ -123,9 +124,14 @@ class Launcher:
                     f_task_desc,
                     indent=4,
                 )
+            start_time = time.time()
             proc = await self._run_single_process(task.cmd_str(), task.io_folder, task.cwd, env)
             status = "SUCCESS" if proc.returncode == 0 else "FAIL"
-            logger.warning("%s Task-%d PID=%d CUDA=%s: %s", status, task_id, proc.pid, cuda, task.identifier)
+            cost_time = time.time() - start_time
+            logger.warning("%s Task-%d PID=%d CUDA=%s (time: %d): %s", status, task_id, proc.pid, cuda, int(cost_time), task.identifier)
+            if cost_time < 30:
+                with open(io_folder / 'END_QUICKLY', 'w', encoding='utf-8') as f:
+                    f.write(f'cost_time: {cost_time} seconds.')
             return status
 
     async def _run_single_process(self, cmd: str, io_folder: Union[Path, str], cwd: str, env: Dict[str, str]):
