@@ -100,13 +100,14 @@ class Launcher:
 
     async def _run(self, tasks):
         rm = ResourceManager(self.cuda_list)
-        jobs = [self._launch_task(task, i, rm) for i, task in enumerate(tasks)]
+        jobs = [self._launch_task(task, i, rm, total=len(tasks)) for i, task in enumerate(tasks)]
         await asyncio.gather(*jobs)
 
-    async def _launch_task(self, task: Task, task_id: int, resource_manager: ResourceManager) -> str:
+    async def _launch_task(self, task: Task, task_id: int, resource_manager: ResourceManager, **kwargs) -> str:
+        total = str(kwargs.get('total', '?'))
         async with resource_manager.allocate(quantity=task.cuda_quantity) as cuda_list:
             cuda = ",".join(map(str, cuda_list))
-            logger.info("Running Task-%d CUDA=%s: %s", task_id, cuda, task.identifier)
+            logger.info("Running Task[%d/%s] CUDA=%s: %s", task_id, total, cuda, task.identifier)
             env = deepcopy(task.env)
             env[CUDA_VISIBLE_DEVICES] = str(cuda)
             task.prepare_fn(*task.prepare_fn_args)
@@ -128,7 +129,7 @@ class Launcher:
             proc = await self._run_single_process(task.cmd_str(), task.io_folder, task.cwd, env)
             status = "SUCCESS" if proc.returncode == 0 else "FAIL"
             cost_time = time.time() - start_time
-            logger.warning("%s Task-%d PID=%d CUDA=%s (time: %d): %s", status, task_id, proc.pid, cuda, int(cost_time), task.identifier)
+            logger.warning("%s Task[%d/%s] PID=%d CUDA=%s (time: %d)s: %s", status, task_id, total, proc.pid, cuda, int(cost_time), task.identifier)
             if cost_time < 30:
                 with open(io_folder / 'END_QUICKLY', 'w', encoding='utf-8') as f:
                     f.write(f'cost_time: {cost_time} seconds.')
