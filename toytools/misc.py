@@ -3,6 +3,7 @@ import time
 from datetime import datetime, timedelta
 from typing import Any
 import jstyleson
+from pathlib import Path
 
 BASE32_CHARS = "0123456789abcdefghijkmnprstvwxyz"
 BASE16_CHARS = "0123456789abcdef"
@@ -40,9 +41,16 @@ def get_hash(obj: Any) -> str:
     return md5.hexdigest()
 
 
-def json_dump(obj, file_path, mode='w', **kwargs):
-    with open(file_path, mode=mode) as f:
+def json_dump(obj, file_path=None, mode='w', **kwargs):
+    if file_path is None:
+        obj_str = jstyleson.dumps(obj)
+        cipher = get_hash(obj_str)[-16:]
+        file_path = f'/tmp/{cipher}.json'
+    
+    indent = kwargs.pop('indent', 2)
+
+    with open(file_path, mode=mode, encoding='utf-8') as f:
         jstyleson.dump(
-            obj, f, **kwargs
+            obj, f, indent=indent, **kwargs
         )
-    return file_path
+    return Path(file_path).absolute()
