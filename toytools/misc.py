@@ -41,11 +41,14 @@ def get_hash(obj: Any) -> str:
     return md5.hexdigest()
 
 
-def json_dump(obj, file_path=None, mode='w', **kwargs):
+def json_dump(obj, file_path=None, mode='w', temp_folder=None, **kwargs):
     if file_path is None:
         obj_str = jstyleson.dumps(obj)
         cipher = get_hash(obj_str)[-16:]
-        file_path = f'/tmp/{cipher}.json'
+        if temp_folder is None:
+            file_path = f'/tmp/{cipher}.json'
+        else:
+            file_path = Path(temp_folder, f'{cipher}.json')
     
     indent = kwargs.pop('indent', 2)
 
