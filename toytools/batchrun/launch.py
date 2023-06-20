@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Union
 from unittest.mock import Mock
 import time
+import platform
 
 logging.basicConfig(format="%(asctime)s %(levelname)-8s %(message)s", level=logging.INFO, datefmt="%Y-%m-%d %H:%M:%S")
 logger = logging.getLogger("toytools.batchrun")
@@ -72,7 +73,7 @@ class Task:
     ) -> None:
         self.cmd = cmd
         self.cwd = cwd
-        self.io_folder = io_folder
+        self.io_folder = Path(io_folder).resolve()
         self.env = env or os.environ.copy()
         self.cuda_quantity = cuda_quantity
         self.prepare_fn = prepare_fn or Mock()
@@ -86,6 +87,9 @@ class Task:
     def cmd_list(self):
         return self.cmd_str().split()
 
+    def cmd_bash(self):
+        return ' \\\n    '.join(x.strip() for x in self.cmd_list())
+
 
 def pre_launch_worker(io_folder):
     Path(io_folder).mkdir()
@@ -94,8 +98,10 @@ def pre_launch_worker(io_folder):
 class Launcher:
     def __init__(self, cuda_list: List[int]) -> None:
         self.cuda_list = cuda_list
+        self.add_timestamp_to_log = False
 
-    def run(self, tasks: List[Task]):
+    def run(self, tasks: List[Task], add_timestamp_to_log=False):
+        self.add_timestamp_to_log = add_timestamp_to_log
         asyncio.run(self._run(tasks))
 
     async def _run(self, tasks):
@@ -107,39 +113,77 @@ class Launcher:
         total = str(kwargs.get('total', '?'))
         async with resource_manager.allocate(quantity=task.cuda_quantity) as cuda_list:
             cuda = ",".join(map(str, cuda_list))
-            logger.info("Running Task[%d/%s] CUDA=%s: %s", task_id, total, cuda, task.identifier)
+            logging_callback = lambda pid: logger.info("Running Task[%d/%s] PID=%d CUDA=%s: %s", task_id, total, pid, cuda, task.identifier)
             env = deepcopy(task.env)
             env[CUDA_VISIBLE_DEVICES] = str(cuda)
             task.prepare_fn(*task.prepare_fn_args)
 
             io_folder = Path(task.io_folder)
             io_folder.mkdir(exist_ok=True, parents=True)
+            task_description_folder = io_folder / 'task_information'
+            task_description_folder.mkdir(exist_ok=True, parents=True)
+            full_info = {
+                "cmd_str": task.cmd_str(),
+                "cwd": Path(task.cwd).absolute().as_posix(),
+                "cmd_list": task.cmd_list(),
+                "env": dict(sorted(env.items())),
+                "host": platform.uname()._asdict(),
+                'launch_time': time.localtime(),
+            }
+            with open(task_description_folder / "full_description.json", "w", encoding="utf-8") as f_task_desc:
+                json.dump(
+                    full_info,
+                    f_task_desc,
+                    indent=4,
+                )
+            with open(task_description_folder / "task_script.bash", "w", encoding="utf-8") as f_task_desc:
+                f_task_desc.write(task.cmd_bash())
+
             with open(io_folder / "task_description.json", "w", encoding="utf-8") as f_task_desc:
+                cwd = Path(task.cwd).absolute()
                 json.dump(
                     {
-                        "cmd_str": task.cmd_str(),
-                        "cwd": Path(task.cwd).absolute().as_posix(),
+                        "cwd": cwd.relative_to(Path.home()).as_posix() if cwd.is_relative_to(Path.home()) else cwd.as_posix(),
                         "cmd_list": task.cmd_list(),
-                        "env": dict(sorted(env.items())),
                     },
                     f_task_desc,
                     indent=4,
                 )
             start_time = time.time()
-            proc = await self._run_single_process(task.cmd_str(), task.io_folder, task.cwd, env)
+            proc = await self._run_single_process(task.cmd_str(), task.io_folder, task.cwd, env, task_description_folder, full_info, logging_callback)
             status = "SUCCESS" if proc.returncode == 0 else "FAIL"
             cost_time = time.time() - start_time
-            logger.warning("%s Task[%d/%s] PID=%d CUDA=%s (time: %d)s: %s", status, task_id, total, proc.pid, cuda, int(cost_time), task.identifier)
+            log_fn = logger.warning if proc.returncode == 0 else logger.error
+            log_fn("%s Task[%d/%s] PID=%d CUDA=%s (time: %ds): %s", status, task_id, total, proc.pid, cuda, int(cost_time), task.identifier)
             if cost_time < 30:
                 with open(io_folder / 'END_QUICKLY', 'w', encoding='utf-8') as f:
                     f.write(f'cost_time: {cost_time} seconds.')
+
+            full_info['end_time'] = time.localtime()
+            with open(task_description_folder / "full_description.json", "w", encoding="utf-8") as f_task_desc:
+                json.dump(
+                    full_info,
+                    f_task_desc,
+                    indent=4,
+                )
             return status
 
-    async def _run_single_process(self, cmd: str, io_folder: Union[Path, str], cwd: str, env: Dict[str, str]):
-        with open(io_folder / "stdout.log", "w", encoding="utf-8") as f_out, open(
-            io_folder / "stderr.log", "w", encoding="utf-8"
+    async def _run_single_process(self, cmd: str, io_folder: Union[Path, str], cwd: str, env: Dict[str, str],
+                                  task_description_folder, full_info, logging_callback):
+        io_folder = Path(io_folder)
+        timestamp = ('_' + str(int(time.time()))) if self.add_timestamp_to_log else ''
+        with open(io_folder / f"stdout{timestamp}.log", "w", encoding="utf-8") as f_out, open(
+            io_folder / f"stderr{timestamp}.log", "w", encoding="utf-8"
         ) as f_err:
             proc = await asyncio.create_subprocess_shell(cmd, stdout=f_out, stderr=f_err, cwd=cwd, env=env)
+            full_info['pid'] = proc.pid
+            logging_callback(proc.pid)
+            with open(task_description_folder / "full_description.json", "w", encoding="utf-8") as f_task_desc:
+                json.dump(
+                    full_info,
+                    f_task_desc,
+                    indent=4,
+                )
             await proc.wait()
             return proc
 
@@ -155,9 +199,9 @@ if __name__ == "__main__":
         task = Task(
             cmd=["python", "-c", f'"print({i})"'],
             cwd=".",
-            io_folder=f"/tmp/{i}",
+            io_folder=f"tmp/{i}",
             prepare_fn=create_folder,
             prepare_fn_args=(f"/tmp/{i}",),
         )
         tasks.append(task)
-    launcher.run(tasks)
+    launcher.run(tasks, add_timestamp_to_log=False)
