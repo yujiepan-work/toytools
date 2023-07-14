@@ -57,3 +57,7 @@ def json_dump(obj, file_path=None, mode='w', temp_folder=None, **kwargs):
             obj, f, indent=indent, **kwargs
         )
     return Path(file_path).absolute()
+
+def json_load(file_path, encoding='utf-8'):
+    with open(Path(file_path), 'r', encoding=encoding) as f:
+        return jstyleson.load(f)
