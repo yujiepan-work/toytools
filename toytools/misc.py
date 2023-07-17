@@ -49,7 +49,7 @@ def json_dump(obj, file_path=None, mode='w', temp_folder=None, **kwargs):
             file_path = f'/tmp/{cipher}.json'
         else:
             file_path = Path(temp_folder, f'{cipher}.json')
-    
+
     indent = kwargs.pop('indent', 2)
 
     with open(file_path, mode=mode, encoding='utf-8') as f:
@@ -58,6 +58,21 @@ def json_dump(obj, file_path=None, mode='w', temp_folder=None, **kwargs):
         )
     return Path(file_path).absolute()
 
+
 def json_load(file_path, encoding='utf-8'):
     with open(Path(file_path), 'r', encoding=encoding) as f:
         return jstyleson.load(f)
+
+
+def set_seed(seed: int = 42):
+    """Set seed for `torch`, `numpy` and built-in `random`."""
+    try:
+        import torch
+        torch.manual_seed(seed)
+        torch.cuda.manual_seed_all(seed)
+    except ImportError as err:
+        pass
+    import numpy as np
+    np.random.seed(seed)
+    import random
+    random.seed(seed)
