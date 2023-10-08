@@ -47,12 +47,17 @@ class ResourceManager:
         self._resources = asyncio.Queue()
         for item in items:
             self._resources.put_nowait(item)
+        self._lock = asyncio.Lock()
 
     @asynccontextmanager
     async def allocate(self, quantity: int = 1):
         items = []
-        for _ in range(quantity):
-            items.append(await self._resources.get())
+        while len(items) < quantity:
+            async with self._lock:
+                if self._resources.qsize() >= quantity:
+                    for _ in range(quantity):
+                        items.append(await self._resources.get())
+            await asyncio.sleep(1)
         yield items
         for item in items:
             await self._resources.put(item)
