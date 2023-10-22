@@ -5,7 +5,11 @@ from pathlib import Path
 from typing import List, Literal, Optional, Union
 
 import numpy as np
-from openvino.runtime import Core
+
+try:
+    from openvino.runtime import Core
+except:
+    pass
 
 BYTES_GENERATORS = {
     "ones": lambda length: np.ones((length,), dtype=np.uint8).tobytes(),
